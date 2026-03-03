@@ -10,6 +10,10 @@ export class ModuleManager {
     this.modules.set(module.id, module);
   }
 
+  public getCurrentModuleId(): string | null {
+    return this.current?.id ?? null;
+  }
+
   public async enter(id: string): Promise<void> {
     const next = this.modules.get(id);
     if (!next) throw new Error(`module not found: ${id}`);
