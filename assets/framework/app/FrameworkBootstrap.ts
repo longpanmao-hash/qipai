@@ -20,6 +20,8 @@ export interface BootstrapOptions {
 }
 
 export class FrameworkBootstrap {
+  private static ctx: FrameworkContext | null = null;
+
   public static create(ui: UIService, options?: BootstrapOptions): FrameworkContext {
     const events = new EventBus();
     const clock = new ClockService();
@@ -31,11 +33,17 @@ export class FrameworkBootstrap {
     const net = new NetService(clock, codec);
 
     const ctx: FrameworkContext = { events, clock, platform, analytics, data, res, net, ui };
+    this.ctx = ctx;
 
     data.loadAll();
     this.bindSettingsToRuntime(ctx);
     this.installClockTicker(clock);
     return ctx;
+  }
+
+  public static getContext(): FrameworkContext {
+    if (!this.ctx) throw new Error('Framework context not initialized');
+    return this.ctx;
   }
 
   private static bindSettingsToRuntime(ctx: FrameworkContext): void {

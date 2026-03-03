@@ -15,6 +15,12 @@ interface BoundHandler {
   owner?: object;
 }
 
+interface BoundCmdHandler {
+  cmd: number;
+  handler: NetHandler;
+  owner?: object;
+}
+
 export class NetService {
   private ws: WebSocket | null = null;
   private seq = 1;
@@ -25,7 +31,9 @@ export class NetService {
   private heartbeatTimer = 0;
 
   private handlers = new Map<string, Set<BoundHandler>>();
+  private cmdHandlers = new Map<number, Set<BoundCmdHandler>>();
   private ownerMap = new Map<object, Set<BoundHandler>>();
+  private cmdOwnerMap = new Map<object, Set<BoundCmdHandler>>();
   private pending = new Map<number, PendingRequest>();
 
   public constructor(
@@ -117,9 +125,42 @@ export class NetService {
 
   public offByOwner(owner: object): void {
     const set = this.ownerMap.get(owner);
-    if (!set) return;
-    for (const item of Array.from(set)) this.detach(item);
-    this.ownerMap.delete(owner);
+    if (set) {
+      for (const item of Array.from(set)) this.detach(item);
+      this.ownerMap.delete(owner);
+    }
+
+    const cmdSet = this.cmdOwnerMap.get(owner);
+    if (!cmdSet) return;
+    for (const item of Array.from(cmdSet)) this.detachCmd(item);
+    this.cmdOwnerMap.delete(owner);
+  }
+
+  public addHandlers(cmds: number[], handler: NetHandler, owner?: object): () => void {
+    const items: BoundCmdHandler[] = [];
+    for (const cmd of cmds) {
+      const item: BoundCmdHandler = { cmd, handler, owner };
+      let set = this.cmdHandlers.get(cmd);
+      if (!set) {
+        set = new Set();
+        this.cmdHandlers.set(cmd, set);
+      }
+      set.add(item);
+      items.push(item);
+
+      if (owner) {
+        let ownerSet = this.cmdOwnerMap.get(owner);
+        if (!ownerSet) {
+          ownerSet = new Set();
+          this.cmdOwnerMap.set(owner, ownerSet);
+        }
+        ownerSet.add(item);
+      }
+    }
+
+    return () => {
+      for (const item of items) this.detachCmd(item);
+    };
   }
 
   private sendPacket(packet: NetPacket): void {
@@ -138,8 +179,13 @@ export class NetService {
     }
 
     const handlers = this.handlers.get(packet.route);
-    if (!handlers) return;
-    for (const h of Array.from(handlers)) h.handler(packet);
+    if (handlers) {
+      for (const h of Array.from(handlers)) h.handler(packet);
+    }
+
+    const cmdHandlers = this.cmdHandlers.get(packet.cmd);
+    if (!cmdHandlers) return;
+    for (const h of Array.from(cmdHandlers)) h.handler(packet);
   }
 
   private detach(item: BoundHandler): void {
@@ -150,6 +196,18 @@ export class NetService {
       const ownerSet = this.ownerMap.get(item.owner);
       ownerSet?.delete(item);
       if (ownerSet && ownerSet.size === 0) this.ownerMap.delete(item.owner);
+    }
+  }
+
+  private detachCmd(item: BoundCmdHandler): void {
+    const cmdSet = this.cmdHandlers.get(item.cmd);
+    cmdSet?.delete(item);
+    if (cmdSet && cmdSet.size === 0) this.cmdHandlers.delete(item.cmd);
+
+    if (item.owner) {
+      const ownerSet = this.cmdOwnerMap.get(item.owner);
+      ownerSet?.delete(item);
+      if (ownerSet && ownerSet.size === 0) this.cmdOwnerMap.delete(item.owner);
     }
   }
 

@@ -67,6 +67,7 @@ export class UIService extends Component {
     node.getComponent(UIViewBase)?.onClose();
     if (this.currentPopup === node) {
       this.currentPopup = null;
+      this.ctx.events.emit('ui.popup.closed', { node });
       this.flushPopupQueue();
     }
     this.pageStack = this.pageStack.filter((p) => p !== node);
@@ -100,6 +101,16 @@ export class UIService extends Component {
 
   public hideLoading(node: Node | null): void {
     node?.destroy();
+  }
+
+  public closeCurrentPopup(): void {
+    if (!this.currentPopup) return;
+    this.close(this.currentPopup);
+  }
+
+  public clearPopupQueue(): void {
+    this.popupQueue.length = 0;
+    this.closeCurrentPopup();
   }
 
   private flushPopupQueue(): void {
